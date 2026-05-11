@@ -23,7 +23,7 @@ matcher = MatchingEngine(db)
 @app.post("/api/v1/identify")
 async def identify(file: UploadFile = File(...)):
     start_time = time.time()
-    temp_path = f"/tmp/temp_{file.filename}"
+    temp_path = f"./temp_{file.filename}"
 
     try:
         content = await file.read()
