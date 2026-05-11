@@ -23,14 +23,13 @@ matcher = MatchingEngine(db)
 @app.post("/api/v1/identify")
 async def identify(file: UploadFile = File(...)):
     start_time = time.time()
-    temp_path = f"temp_{file.filename}"
+    temp_path = f"/tmp/temp_{file.filename}"
 
     try:
         content = await file.read()
         with open(temp_path, "wb") as f:
             f.write(content)
 
-        # Performance Metrics
         clip_duration = librosa.get_duration(path=temp_path)
         features = extractor.extract_features(temp_path)
         result = matcher.find_match(features)
@@ -59,7 +58,7 @@ async def identify(file: UploadFile = File(...)):
 @app.get("/health")
 async def health():
     try:
-        song_count = len(db.client.keys("meta:*"))
+        song_count = len(self.db.client.keys("meta:*"))
         return {"status": "online", "songs_indexed": song_count}
     except Exception:
         return {"status": "offline", "error": "Redis connection failed"}
