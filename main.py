@@ -39,17 +39,18 @@ async def identify(file: UploadFile = File(...)):
         sanitized_extension = (
             normalized_extension if normalized_extension in ALLOWED_AUDIO_EXTENSIONS else ""
         )
-        fd, temp_path = tempfile.mkstemp(prefix="temp_", suffix=sanitized_extension)
-        fd_wrapped = False
+        fd, temp_path = tempfile.mkstemp(
+            prefix="temp_",
+            suffix=sanitized_extension,
+            dir=tempfile.gettempdir(),
+        )
         try:
             file_handle = os.fdopen(fd, "wb")
-            fd_wrapped = True
-            with file_handle as f:
-                f.write(content)
         except OSError:
-            if not fd_wrapped:
-                os.close(fd)
+            os.close(fd)
             raise
+        with file_handle as f:
+            f.write(content)
 
         clip_duration = librosa.get_duration(path=temp_path)
         features = extractor.extract_features(temp_path)
