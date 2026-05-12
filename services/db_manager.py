@@ -1,12 +1,15 @@
+import os
 import redis
 import json
-import os
 
 class RedisManager:
     def __init__(self):
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        self.client = redis.from_url(
-            redis_url, 
+        if "upstash.io" in redis_url and not redis_url.startswith("rediss://"):
+            redis_url = redis_url.replace("redis://", "rediss://")\
+            
+        self.client = redis.Redis.from_url(
+            redis_url,
             decode_responses=True,
             socket_timeout=5,
             retry_on_timeout=True
