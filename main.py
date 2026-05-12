@@ -58,6 +58,7 @@ async def identify(file: UploadFile = File(...)):
 @app.get("/health")
 async def health():
     try:
+        db.client.ping()
         song_count = len(self.db.client.keys("meta:*"))
         return {"status": "online", "songs_indexed": song_count}
     except Exception:
