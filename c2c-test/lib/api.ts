@@ -121,7 +121,7 @@ export async function runEvaluation(rows: EvalRowInput[]): Promise<EvalResponse>
   const falsePositives = results.length - passedCount - falseNegatives;
 
   return {
-    accuracy: rows.length ? Math.round((passedCount / rows.length) * 1000) / 10 : 0,
+    accuracy: results.length ? Math.round((passedCount / results.length) * 1000) / 10 : 0,
     falsePositives,
     falseNegatives,
     rows: results,
@@ -131,19 +131,12 @@ export async function runEvaluation(rows: EvalRowInput[]): Promise<EvalResponse>
 async function readErrorMessage(response: Response): Promise<string | null> {
   try {
     const payload = await response.json();
-    if (typeof payload.detail === "string") {
-      return payload.detail;
-    }
-    if (typeof payload.message === "string") {
-      return payload.message;
-    }
-    if (typeof payload.error === "string") {
-      return payload.error;
-    }
+    if (typeof payload.detail === "string") return payload.detail;
+    if (typeof payload.message === "string") return payload.message;
+    if (typeof payload.error === "string") return payload.error;
   } catch {
     return null;
   }
-
   return null;
 }
 
@@ -176,27 +169,34 @@ function normalizeHealth(payload: Record<string, unknown>): HealthResponse {
 }
 
 function normalizeIdentify(payload: Record<string, unknown>, clientLatencyMs: number): QueryResponse {
-  console.log((payload));
-  const matchPayload = Object(payload.match);
+  const matchObj = getObject(payload.match);
   const confidence = Number(payload.confidence ?? 0);
   const normalizedConfidence = confidence > 1 ? confidence / 100 : confidence;
-  const latency = Object(payload.latency);
+  
+  let latencyMs: number;
+  if (typeof payload.latency === "number") {
+    latencyMs = payload.latency;
+  } else if (typeof payload.latency === "string") {
+    latencyMs = parseFloat(payload.latency) || clientLatencyMs;
+  } else {
+    latencyMs = clientLatencyMs;
+  }
 
   return {
-    match: matchPayload ? normalizeSong(payload) : null,
+    match: matchObj ? normalizeSong(matchObj) : null,
     confidence: Math.max(0, Math.min(1, normalizedConfidence)),
-    latencyMs: latency,
-    status: matchPayload ? "matched" : "unknown",
+    latencyMs: latencyMs,
+    status: matchObj ? "matched" : "unknown",
   };
 }
 
-function normalizeSong(payload: Record<string, unknown>): SongMatch {
+function normalizeSong(data: Record<string, unknown>): SongMatch {
   return {
-    songId: String(payload.filename ?? "UNKNOWN"),
-    title: String(payload.title ?? payload.name ?? "Unknown title"),
-    artist: String(payload.artist ?? "Unknown artist"),
-    duration: String(payload.duration ?? payload.duration_sec ?? "--"),
-    genre: String(payload.type ?? "Unknown genre"),
+    songId: String(data.songId ?? data.filename ?? "UNKNOWN"),
+    title: String(data.title ?? data.filename ?? "Unknown title"),
+    artist: String(data.artist ?? "Unknown artist"),
+    duration: String(data.duration ?? data.duration_sec ?? "--"),
+    genre: String(data.genre ?? data.type ?? "Audio"),
   };
 }
 
@@ -204,6 +204,5 @@ function getObject(value: unknown): Record<string, unknown> | null {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
   }
-
   return null;
 }
