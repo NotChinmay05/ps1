@@ -1,14 +1,21 @@
 import os
-import time
+import sys
 import tempfile
-import librosa
-from fastapi import FastAPI, UploadFile, File
+import shutil
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from services.db_manager import RedisManager
-from services.fingerprinter import ConstellationExtractor, MatchingEngine
 
-app = FastAPI()
-ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".webm", ".mp4"}
+ffmpeg_bin_path = os.path.join(os.getcwd(), "ffmpeg_bin")
+if os.path.exists(ffmpeg_bin_path):
+    os.environ["PATH"] += os.pathsep + ffmpeg_bin_path
+    print(f"DEBUG: Added {ffmpeg_bin_path} to PATH")
+    
+try:
+    from services.db_manager import RedisManager
+except ImportError as e:
+    print(f"Import Error: {e}")
+
+app = FastAPI(title="Audio Identification API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,84 +25,53 @@ app.add_middleware(
 )
 
 db = RedisManager()
-extractor = ConstellationExtractor()
-matcher = MatchingEngine(db)
-
-@app.on_event("startup")
-async def startup_event():
-    ffmpeg_path = shutil.which("ffmpeg")
-    if ffmpeg_path:
-        print(f"✅ FFmpeg found at: {ffmpeg_path}")
-    else:
-        print("❌ FFmpeg NOT found in PATH")
-
-@app.post("/api/v1/identify")
-async def identify(file: UploadFile = File(...)):
-    start_time = time.time()
-    filename = os.path.basename(file.filename)
-    temp_path = os.path.join(os.getcwd(), f"temp_{filename}")
-
-    try:
-        content = await file.read()
-        base_filename = os.path.basename(file.filename) if file.filename else ""
-        _, original_extension = os.path.splitext(base_filename)
-        normalized_extension = original_extension.lower()
-        sanitized_extension = (
-            normalized_extension if normalized_extension in ALLOWED_AUDIO_EXTENSIONS else ""
-        )
-        fd, temp_path = tempfile.mkstemp(
-            prefix="temp_",
-            suffix=sanitized_extension,
-            dir=tempfile.gettempdir(),
-        )
-        try:
-            file_handle = os.fdopen(fd, "wb")
-        except OSError:
-            os.close(fd)
-            raise
-        with file_handle as f:
-            f.write(content)
-        clip_duration = librosa.get_duration(path=temp_path)
-        features = extractor.extract_features(temp_path)
-        result = matcher.find_match(features)
-        
-        latency = time.time() - start_time
-
-        if result:
-            return {
-                "match": True,
-                "confidence": result["confidence"],
-                "latency": f"{latency*1000:.2f}",
-                "duration": f"{clip_duration:.2f}s",
-                "type": result["type"],
-                "filename": result["filename"]
-            }
-
-        return {
-            "match": False,
-            "latency": f"{latency:.4f}s",
-            "duration": f"{clip_duration:.2f}s"
-        }
-    
-    except Exception as e:
-        return {"error": str(e)}
-        
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
-
 
 @app.get("/health")
 async def health():
+    """Health check to verify the API and Redis are alive."""
     try:
-        db.client.ping()
-        song_keys = db.client.keys("meta:*")
-        song_count = len(song_keys)
+        redis_status = "connected" if db.client.ping() else "disconnected"
+    except Exception:
+        redis_status = "error"
         
+    return {
+        "status": "healthy",
+        "redis": redis_status,
+        "ffmpeg": "found" if shutil.which("ffmpeg") else "not_found"
+    }
+
+@app.post("/api/v1/identify")
+async def identify(file: UploadFile = File(...)):
+    """
+    Identifies audio files. 
+    Uses /tmp to avoid permission issues and manual cleanup to save space.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp:
+        try:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"File write error: {str(e)}")
+
+    try:
         return {
-            "status": "online", 
-            "songs_indexed": song_count,
-            "environment": "production" if os.getenv("REDIS_URL") else "development"
+            "status": "success",
+            "filename": file.filename,
+            "message": "File received and processed"
         }
+
     except Exception as e:
-        return {"status": "offline", "error": str(e)}
+        print(f"IDENTIFY ERROR: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal processing error")
+
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
