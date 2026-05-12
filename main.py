@@ -1,5 +1,6 @@
 import os
 import time
+import tempfile
 import librosa
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,11 +28,15 @@ except Exception as e:
 @app.post("/api/v1/identify")
 async def identify(file: UploadFile = File(...)):
     start_time = time.time()
-    temp_path = f"/temp_{file.filename}"
+    temp_path = None
 
     try:
         content = await file.read()
-        with open(temp_path, "wb") as f:
+        safe_name = os.path.basename(file.filename or "upload")
+        _, extension = os.path.splitext(safe_name)
+        fd, temp_path = tempfile.mkstemp(prefix="temp_", suffix=extension, dir="/tmp")
+
+        with os.fdopen(fd, "wb") as f:
             f.write(content)
 
         clip_duration = librosa.get_duration(path=temp_path)
@@ -55,7 +60,7 @@ async def identify(file: UploadFile = File(...)):
             "duration": f"{clip_duration:.2f}s"
         }
     finally:
-        if os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
 
 
