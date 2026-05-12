@@ -21,6 +21,14 @@ db = RedisManager()
 extractor = ConstellationExtractor()
 matcher = MatchingEngine(db)
 
+@app.on_event("startup")
+async def startup_event():
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        print(f"✅ FFmpeg found at: {ffmpeg_path}")
+    else:
+        print("❌ FFmpeg NOT found in PATH")
+
 @app.post("/api/v1/identify")
 async def identify(file: UploadFile = File(...)):
     start_time = time.time()
