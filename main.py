@@ -27,7 +27,7 @@ except Exception as e:
 @app.post("/api/v1/identify")
 async def identify(file: UploadFile = File(...)):
     start_time = time.time()
-    temp_path = f"/temp_{file.filename}"
+    temp_path = os.path.join(os.getcwd(), f"temp_{filename}")
 
     try:
         content = await file.read()
