@@ -8,6 +8,7 @@ from services.db_manager import RedisManager
 from services.fingerprinter import ConstellationExtractor, MatchingEngine
 
 app = FastAPI()
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".webm", ".mp4"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,6 +35,7 @@ async def identify(file: UploadFile = File(...)):
         content = await file.read()
         safe_name = os.path.basename(file.filename or "upload")
         _, extension = os.path.splitext(safe_name)
+        extension = extension.lower() if extension.lower() in ALLOWED_AUDIO_EXTENSIONS else ""
         fd, temp_path = tempfile.mkstemp(prefix="temp_", suffix=extension, dir="/tmp")
 
         with os.fdopen(fd, "wb") as f:
