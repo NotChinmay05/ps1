@@ -5,7 +5,7 @@ import os
 class RedisManager:
     def __init__(self):
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        self.client = redis.Redis.from_url(
+        self.client = redis.from_url(
             redis_url, 
             decode_responses=True,
             socket_timeout=5,
