@@ -1,21 +1,21 @@
 import os
-import sys
+import time
 import tempfile
+import librosa
 import shutil
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from services.db_manager import RedisManager
+from services.fingerprinter import ConstellationExtractor, MatchingEngine
 
+# --- 1. Environment & Path Setup ---
+# This ensures FFmpeg (downloaded via build.sh) is accessible to librosa
 ffmpeg_bin_path = os.path.join(os.getcwd(), "ffmpeg_bin")
 if os.path.exists(ffmpeg_bin_path):
     os.environ["PATH"] += os.pathsep + ffmpeg_bin_path
-    print(f"DEBUG: Added {ffmpeg_bin_path} to PATH")
-    
-try:
-    from services.db_manager import RedisManager
-except ImportError as e:
-    print(f"Import Error: {e}")
 
-app = FastAPI(title="Audio Identification API")
+app = FastAPI()
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".webm", ".mp4"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,54 +24,75 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize Services
 db = RedisManager()
-
-@app.get("/health")
-async def health():
-    """Health check to verify the API and Redis are alive."""
-    try:
-        redis_status = "connected" if db.client.ping() else "disconnected"
-    except Exception:
-        redis_status = "error"
-        
-    return {
-        "status": "healthy",
-        "redis": redis_status,
-        "ffmpeg": "found" if shutil.which("ffmpeg") else "not_found"
-    }
+extractor = ConstellationExtractor()
+matcher = MatchingEngine(db)
 
 @app.post("/api/v1/identify")
 async def identify(file: UploadFile = File(...)):
-    """
-    Identifies audio files. 
-    Uses /tmp to avoid permission issues and manual cleanup to save space.
-    """
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp:
-        try:
-            content = await file.read()
-            tmp.write(content)
-            tmp_path = tmp.name
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"File write error: {str(e)}")
+    start_time = time.time()
+    temp_path = None
 
     try:
+        content = await file.read()
+        base_filename = os.path.basename(file.filename) if file.filename else "upload"
+        _, original_extension = os.path.splitext(base_filename)        
+        fd, temp_path = tempfile.mkstemp(
+            prefix="identify_",
+            suffix=original_extension.lower() if original_extension.lower() in ALLOWED_AUDIO_EXTENSIONS else ".wav",
+            dir=tempfile.gettempdir()
+        )
+
+        with os.fdopen(fd, "wb") as f:
+            f.write(content)
+
+        clip_duration = librosa.get_duration(path=temp_path)
+        features = extractor.extract_features(temp_path)
+        result = matcher.find_match(features)
+        latency_ms = (time.time() - start_time) * 1000
+
+        if result:
+            return {
+                "match": {
+                    "filename": result.get("filename", "Unknown"),
+                    "type": result.get("type", "Audio"),
+                    "duration_sec": f"{clip_duration:.2f}"
+                },
+                "confidence": result.get("confidence", 0),
+                "latency": latency_ms,
+                "status": "success"
+            }
+
         return {
-            "status": "success",
-            "filename": file.filename,
-            "message": "File received and processed"
+            "match": None,
+            "latency": latency_ms,
+            "status": "no_match",
+            "duration": f"{clip_duration:.2f}s"
         }
 
     except Exception as e:
-        print(f"IDENTIFY ERROR: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal processing error")
+        print(f"ERROR: {str(e)}")
+        return {"error": str(e), "status": "failed"}
 
     finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+@app.get("/health")
+async def health():
+    try:
+        db.client.ping()
+        song_keys = db.client.keys("meta:*")
+        
+        return {
+            "status": "healthy",
+            "songs_loaded": len(song_keys),
+            "ffmpeg": "found" if shutil.which("ffmpeg") else "not_found",
+            "environment": "production" if os.getenv("REDIS_URL") else "development"
+        }
+    except Exception as e:
+        return {"status": "degraded", "error": str(e)}
