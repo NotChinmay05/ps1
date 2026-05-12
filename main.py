@@ -33,7 +33,7 @@ async def identify(file: UploadFile = File(...)):
 
     try:
         content = await file.read()
-        base_filename = os.path.basename(file.filename or "upload")
+        base_filename = os.path.basename(file.filename) if file.filename else ""
         _, original_extension = os.path.splitext(base_filename)
         normalized_extension = original_extension.lower()
         sanitized_extension = (
@@ -44,7 +44,7 @@ async def identify(file: UploadFile = File(...)):
         try:
             with os.fdopen(fd, "wb") as f:
                 f.write(content)
-        except Exception:
+        except OSError:
             try:
                 os.close(fd)
             except OSError:
