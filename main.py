@@ -15,14 +15,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-try:
-    db = RedisManager()
-    extractor = ConstellationExtractor()
-    matcher = MatchingEngine(db)
-    print("✅ Services initialized successfully")
-except Exception as e:
-    print(f"❌ CRITICAL INITIALIZATION ERROR: {e}")
-
+db = RedisManager()
+extractor = ConstellationExtractor()
+matcher = MatchingEngine(db)
 
 @app.post("/api/v1/identify")
 async def identify(file: UploadFile = File(...)):
@@ -34,10 +29,10 @@ async def identify(file: UploadFile = File(...)):
         content = await file.read()
         with open(temp_path, "wb") as f:
             f.write(content)
-
         clip_duration = librosa.get_duration(path=temp_path)
         features = extractor.extract_features(temp_path)
         result = matcher.find_match(features)
+        
         latency = time.time() - start_time
 
         if result:
@@ -55,6 +50,10 @@ async def identify(file: UploadFile = File(...)):
             "latency": f"{latency:.4f}s",
             "duration": f"{clip_duration:.2f}s"
         }
+    
+    except Exception as e:
+        return {"error": str(e)}
+        
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -64,7 +63,13 @@ async def identify(file: UploadFile = File(...)):
 async def health():
     try:
         db.client.ping()
-        song_count = len(self.db.client.keys("meta:*"))
-        return {"status": "online", "songs_indexed": song_count}
-    except Exception:
-        return {"status": "offline", "error": "Redis connection failed"}
+        song_keys = db.client.keys("meta:*")
+        song_count = len(song_keys)
+        
+        return {
+            "status": "online", 
+            "songs_indexed": song_count,
+            "environment": "production" if os.getenv("REDIS_URL") else "development"
+        }
+    except Exception as e:
+        return {"status": "offline", "error": str(e)}
