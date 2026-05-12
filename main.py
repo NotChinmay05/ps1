@@ -1,5 +1,6 @@
 import os
 import time
+import tempfile
 import librosa
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,7 @@ from services.db_manager import RedisManager
 from services.fingerprinter import ConstellationExtractor, MatchingEngine
 
 app = FastAPI()
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".webm", ".mp4"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,7 +29,23 @@ async def identify(file: UploadFile = File(...)):
 
     try:
         content = await file.read()
-        with open(temp_path, "wb") as f:
+        base_filename = os.path.basename(file.filename) if file.filename else ""
+        _, original_extension = os.path.splitext(base_filename)
+        normalized_extension = original_extension.lower()
+        sanitized_extension = (
+            normalized_extension if normalized_extension in ALLOWED_AUDIO_EXTENSIONS else ""
+        )
+        fd, temp_path = tempfile.mkstemp(
+            prefix="temp_",
+            suffix=sanitized_extension,
+            dir=tempfile.gettempdir(),
+        )
+        try:
+            file_handle = os.fdopen(fd, "wb")
+        except OSError:
+            os.close(fd)
+            raise
+        with file_handle as f:
             f.write(content)
         clip_duration = librosa.get_duration(path=temp_path)
         features = extractor.extract_features(temp_path)
@@ -55,7 +73,7 @@ async def identify(file: UploadFile = File(...)):
         return {"error": str(e)}
         
     finally:
-        if os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
 
 
