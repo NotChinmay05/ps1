@@ -33,16 +33,23 @@ async def identify(file: UploadFile = File(...)):
 
     try:
         content = await file.read()
-        safe_name = os.path.basename(file.filename or "upload")
-        _, original_extension = os.path.splitext(safe_name)
+        base_filename = os.path.basename(file.filename or "upload")
+        _, original_extension = os.path.splitext(base_filename)
         normalized_extension = original_extension.lower()
         sanitized_extension = (
             normalized_extension if normalized_extension in ALLOWED_AUDIO_EXTENSIONS else ""
         )
         fd, temp_path = tempfile.mkstemp(prefix="temp_", suffix=sanitized_extension)
 
-        with os.fdopen(fd, "wb") as f:
-            f.write(content)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(content)
+        except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            raise
 
         clip_duration = librosa.get_duration(path=temp_path)
         features = extractor.extract_features(temp_path)
