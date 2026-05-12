@@ -34,10 +34,12 @@ async def identify(file: UploadFile = File(...)):
     try:
         content = await file.read()
         safe_name = os.path.basename(file.filename or "upload")
-        _, extension = os.path.splitext(safe_name)
-        normalized_extension = extension.lower()
-        extension = normalized_extension if normalized_extension in ALLOWED_AUDIO_EXTENSIONS else ""
-        fd, temp_path = tempfile.mkstemp(prefix="temp_", suffix=extension, dir=tempfile.gettempdir())
+        _, original_extension = os.path.splitext(safe_name)
+        normalized_extension = original_extension.lower()
+        sanitized_extension = (
+            normalized_extension if normalized_extension in ALLOWED_AUDIO_EXTENSIONS else ""
+        )
+        fd, temp_path = tempfile.mkstemp(prefix="temp_", suffix=sanitized_extension)
 
         with os.fdopen(fd, "wb") as f:
             f.write(content)
