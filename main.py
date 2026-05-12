@@ -15,9 +15,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-db = RedisManager()
-extractor = ConstellationExtractor()
-matcher = MatchingEngine(db)
+try:
+    db = RedisManager()
+    extractor = ConstellationExtractor()
+    matcher = MatchingEngine(db)
+    print("✅ Services initialized successfully")
+except Exception as e:
+    print(f"❌ CRITICAL INITIALIZATION ERROR: {e}")
 
 
 @app.post("/api/v1/identify")
