@@ -48,12 +48,7 @@ async def identify(file: UploadFile = File(...)):
 
         if result:
             return {
-                "match": {
-                    "songId": str(result.get("filename", "UNKNOWN")),
-                    "title": str(result.get("filename", "Found Match")),
-                    "artist": str(result.get("type", "Audio")),
-                    "duration": f"{duration:.2f}s"
-                },
+                "match": str(result.get("filename", "Found Match")),
                 "confidence": result.get("confidence", 0),
                 "latency": latency_ms,
                 "status": "matched"

@@ -7,8 +7,13 @@ print(f"!!! DEBUG: Redis library is loading from: {redis.__file__}")
 class RedisManager:
     def __init__(self):
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        if "upstash.io" in redis_url and not redis_url.startswith("rediss://"):
-            redis_url = redis_url.replace("redis://", "rediss://")\
+        
+        # Ensure the URL has a valid scheme
+        if not redis_url.startswith(("redis://", "rediss://", "unix://")):
+            redis_url = f"rediss://{redis_url}" if "upstash.io" in redis_url else f"redis://{redis_url}"
+
+        if "upstash.io" in redis_url and redis_url.startswith("redis://"):
+            redis_url = redis_url.replace("redis://", "rediss://", 1)
             
         self.client = redis.Redis.from_url(
             redis_url,
