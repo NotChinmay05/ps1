@@ -2,8 +2,6 @@ import os
 import redis
 import json
 
-print(f"!!! DEBUG: Redis library is loading from: {redis.__file__}")
-
 class RedisManager:
     def __init__(self):
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
