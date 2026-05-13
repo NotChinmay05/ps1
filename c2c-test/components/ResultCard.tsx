@@ -45,7 +45,7 @@ export function ResultCard({ result }: ResultCardProps) {
         <div className="rounded-lg border border-line bg-white/[0.035] p-4">
           <Timer className="mb-3 h-4 w-4 text-cyan" aria-hidden="true" />
           <p className="text-xs text-slate-400">Latency</p>
-          <p className="mt-1 font-mono text-sm text-slate-100">{result.latencyMs} ms</p>
+          <p className="mt-1 font-mono text-sm text-slate-100">{String(result.latencyMs)} ms</p>
         </div>
         <div className="rounded-lg border border-line bg-white/[0.035] p-4">
           <Gauge className="mb-3 h-4 w-4 text-mint" aria-hidden="true" />
@@ -57,7 +57,7 @@ export function ResultCard({ result }: ResultCardProps) {
       <div className="mt-5">
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="text-slate-300">Confidence</span>
-          <span className="font-mono text-mint">{confidencePercent}%</span>
+          <span className="font-mono text-mint">{String(confidencePercent)}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-white/10">
           <div
