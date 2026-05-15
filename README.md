@@ -30,6 +30,7 @@ Instead of just comparing audio files side-by-side (which is slow and breaks if 
 ## 🌍 Try it Live!
 
 The application is fully deployed and accessible from anywhere:
+the training data drive link is given in the data.md file
 
 - **🎨 Frontend (Vercel)**: — *Head here to upload your audio snippets!*
 - **⚙️ Backend API (Render)**:
